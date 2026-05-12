@@ -52,14 +52,14 @@ import { check, sleep } from 'k6';
 
 export const options = {
   stages: [
-    { duration: '2m', target: 50 },
-    { duration: '5m', target: 200 },
-    { duration: '5m', target: 500 },
-    { duration: '2m', target: 0 },
+    { duration: '2m', target: 50 },   // 2分钟内爬升到50并发
+    { duration: '5m', target: 200 },   // 5分钟内爬升到200并发
+    { duration: '5m', target: 500 },   // 5分钟内爬升到500并发
+    { duration: '2m', target: 0 },     // 2分钟内降到0（冷却）
   ],
   thresholds: {
-    http_req_failed: ['rate<0.01'],
-    http_req_duration: ['p(95)<500'],
+    http_req_failed: ['rate<0.01'],    // 错误率低于1%
+    http_req_duration: ['p(95)<500'],  // P95延迟低于500ms
   },
 };
 
@@ -67,7 +67,7 @@ export default function () {
   const id = Math.floor(Math.random() * 100000);
   const res = http.get(`https://example.com/api/items/${id}`);
   check(res, { 'status is 200': (r) => r.status === 200 });
-  sleep(1);
+  sleep(1);  // 模拟用户思考时间，每个虚拟用户每秒发1个请求
 }
 ```
 
@@ -123,6 +123,8 @@ export default function () {
 第二，写入不同大小的 Value。比较 100B、1KB、10KB、100KB Value 对内存和网络的影响。
 
 第三，构造大 Key。比如一个 List 或 Hash 里放几十万元素，然后执行读取、删除或遍历操作，观察 Redis 延迟。
+
+> 提示：删除大 Key 时使用 `UNLINK` 命令（Redis 4.0+）而不是 `DEL`。`UNLINK` 会在后台异步释放内存，不会阻塞主线程。
 
 第四，构造热 Key。让大量请求访问同一个 Key，观察单节点 CPU 和网络是否成为瓶颈。
 
@@ -207,7 +209,7 @@ export default function () {
 
 ### 常见坑
 
-1. 文件描述符上限太低。
+1. 文件描述符上限太低（Linux 默认 1024，需要通过 `ulimit -n` 或 `/etc/security/limits.conf` 调大）。
 2. 心跳太频繁，带宽被浪费。
 3. 没有慢客户端保护。
 4. 断线重连没有指数退避。
@@ -249,6 +251,8 @@ export default function () {
 ### 推荐步骤
 
 第一，选择一个模型，固定 prompt 和输出长度，测单并发 tokens/s。
+
+> 入门建议：用 Ollama 在本地 Mac 或 Linux 上部署 Qwen2.5-7B 或 Llama-3-8B 等小模型即可开始实验。不需要昂贵 GPU，Apple Silicon Mac 的统一内存也能跑 7B 模型。
 
 第二，增加并发，观察 TTFT、TPOT 和吞吐变化。
 

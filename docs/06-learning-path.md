@@ -16,7 +16,7 @@
 2. Memory。
 3. IO。
 4. Network。
-5. epoll。
+5. epoll（Linux）/ kqueue（macOS）。
 6. 文件系统。
 7. Page Cache。
 8. mmap。
@@ -45,9 +45,11 @@
 
 推荐读：
 
-1. 《性能之巅》。
-2. 《Systems Performance》。
-3. 《深入理解 Linux 内核》。
+1. 《性能之巅》（Brendan Gregg 著，中文版可读性好）。
+2. 《Systems Performance》（同作者英文原版，内容更新更全）。
+3. 《深入理解 Linux 内核》（适合深入学习，初学者可先跳过）。
+
+> 初学者建议：先从《性能之巅》开始，它用大量实际案例解释系统性能，比纯理论书更容易上手。
 
 ## 2. 第二阶段：网络基础
 
@@ -229,8 +231,8 @@ Kafka 要理解：
 
 必须理解：
 
-1. CAP。
-2. 一致性。
+1. CAP（注意：CAP 不是说三选二那么简单，P 在分布式系统中几乎不可避免，实际是在 C 和 A 之间权衡）。
+2. 一致性（强一致、最终一致、因果一致等）。
 3. 分片。
 4. 复制。
 5. 服务发现。
@@ -268,17 +270,19 @@ Kafka 要理解：
 
 需要重点学习：
 
-1. vLLM。
-2. TensorRT-LLM。
-3. Ollama。
+1. vLLM（开源推理引擎，支持 continuous batching 和 PagedAttention）。
+2. TensorRT-LLM（NVIDIA 优化的推理框架，性能好但依赖 NVIDIA GPU）。
+3. Ollama（本地部署开源模型的简单工具，适合入门实验）。
 4. KV Cache。
 5. Continuous Batching。
 6. Batch Scheduling。
 7. CUDA 基础。
 8. GPU 显存计算。
-9. Tensor Parallel。
-10. Pipeline Parallel。
+9. Tensor Parallel（模型太大单卡放不下时，跨卡切分）。
+10. Pipeline Parallel（按层切分模型到不同 GPU）。
 11. TTFT、TPOT、Tokens/s。
+
+> 注意：AI 推理框架发展非常快，vLLM、SGLang、TensorRT-LLM 等工具每几个月都有重大更新。学习时关注核心概念（batching、KV Cache、显存管理），而不是死记某个版本的 API。
 
 AI 推理容量和传统 Web 容量不同。传统 Web 请求通常比较短，CPU 和数据库是主要瓶颈；LLM 请求可能持续几十秒，瓶颈常常在 GPU 显存、KV Cache、batch 调度和 token 生成速度。
 

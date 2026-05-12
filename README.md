@@ -15,11 +15,11 @@
 | 第四章 | [真正高级的容量评估能力](docs/04-advanced-capacity-methods.md) | 用户行为模型、瓶颈定位、压测体系、成本模型和 SLO |
 | 第五章 | [不同阶段的工程师应该达到什么水平](docs/05-engineer-growth-stages.md) | 初级、中级、高级、架构师和 SRE 的能力要求 |
 | 第六章 | [推荐学习路线](docs/06-learning-path.md) | Linux、网络、数据库、性能分析、压测、分布式系统和 AI 容量 |
-| 第七章 | [结合 Typeflux，最值得优先学习什么](docs/07-typeflux-priorities.md) | AI 推理、WebSocket、Redis/Kafka 和成本优化 |
+| 第七章 | [以 Typeflux 为案例：实时 AI 产品最该先学什么](docs/07-typeflux-priorities.md) | AI 推理、WebSocket、Redis/Kafka 和成本优化 |
 | 第八章 | [最有效的实践方式](docs/08-practical-projects.md) | API 压测、Redis 实验、WebSocket 实验和 AI 推理实验 |
 | 第九章 | [最终要形成的思维方式](docs/09-capacity-mindset.md) | 从功能到系统、从平均值到分布、从救火到机制 |
 | 附录 | [容量评估模板与落地清单](docs/10-capacity-planning-template.md) | 可直接复用的容量评估、压测、降级、成本和复盘模板 |
-| 实战案例 | [从零做一次 Typeflux 容量评估](docs/11-end-to-end-case-study.md) | 从 DAU 推导长连接、带宽、ASR、LLM、Redis、MySQL、成本和压测计划 |
+| 实战案例 | [以 Typeflux 为案例：从零做一次容量评估](docs/11-end-to-end-case-study.md) | 从 DAU 推导长连接、带宽、ASR、LLM、Redis、MySQL、成本和压测计划 |
 
 ## 阅读建议
 
@@ -27,7 +27,7 @@
 
 如果你已经负责线上系统，可以优先阅读第三章、第四章和附录，把资源评估、压测报告和容量评审清单用到当前项目里。
 
-如果你正在做 Typeflux 或类似实时 AI 产品，建议重点阅读第七章和实战案例，并把 AI 推理容量、WebSocket 长连接容量和单用户成本模型先建立起来。
+Typeflux 是作者的开源项目，在这里作为贯穿案例使用。读者不需要正在开发 Typeflux，也可以通过第七章和实战案例理解实时 AI 产品的容量评估方法。
 
 ## 核心方法
 

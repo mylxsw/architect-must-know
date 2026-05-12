@@ -45,11 +45,11 @@
 
 推荐读：
 
-1. 《性能之巅》（Brendan Gregg 著，中文版可读性好）。
-2. 《Systems Performance》（同作者英文原版，内容更新更全）。
+1. 《性能之巅》（Brendan Gregg 著，中文版可读性好，原书名 *Systems Performance*）。
+2. 《Systems Performance: Enterprise and the Cloud》（同作者英文第二版，内容更新更全，覆盖容器和云环境）。
 3. 《深入理解 Linux 内核》（适合深入学习，初学者可先跳过）。
 
-> 初学者建议：先从《性能之巅》开始，它用大量实际案例解释系统性能，比纯理论书更容易上手。
+> 初学者建议：先从《性能之巅》中文版开始，它用大量实际案例解释系统性能，比纯理论书更容易上手。如果英文阅读无障碍，直接看英文第二版更好，因为它覆盖了 eBPF、容器等新内容。
 
 ## 2. 第二阶段：网络基础
 
@@ -153,12 +153,12 @@ Kafka 要理解：
 
 必须掌握：
 
-1. flame graph。
-2. pprof。
-3. perf。
-4. tracing。
-5. eBPF。
-6. APM。
+1. flame graph（火焰图：一种可视化工具，横轴表示 CPU 时间占比，纵轴表示调用栈深度）。
+2. pprof（Go 语言内置的性能分析工具，Java 对应的是 JFR/async-profiler）。
+3. perf（Linux 内核级性能分析工具）。
+4. tracing（分布式链路追踪，如 Jaeger、Zipkin、SkyWalking）。
+5. eBPF（Linux 内核中的可编程观测框架，可以在不修改代码的情况下观测系统行为）。
+6. APM（Application Performance Monitoring，应用性能监控平台）。
 7. 慢日志。
 8. 系统指标关联分析。
 
@@ -231,7 +231,7 @@ Kafka 要理解：
 
 必须理解：
 
-1. CAP（注意：CAP 不是说三选二那么简单，P 在分布式系统中几乎不可避免，实际是在 C 和 A 之间权衡）。
+1. CAP（注意：CAP 不是说三选二那么简单。CAP 定理说的是：在网络分区（P）发生时，系统只能在一致性（C）和可用性（A）之间选一个。由于网络分区在分布式系统中几乎不可避免，实际决策是在 C 和 A 之间权衡。例如：银行转账选 C，社交动态选 A）。
 2. 一致性（强一致、最终一致、因果一致等）。
 3. 分片。
 4. 复制。
@@ -320,7 +320,62 @@ AI 推理容量将是未来几年非常值钱的工程能力。因为它同时�
 
 学习容量评估，最好的方法不是看更多概念，而是反复做实验。每做一次实验，你都会对系统边界多一分直觉。
 
-## 9. 本章检查清单
+## 9. 一条 30 天入门训练计划
+
+很多初学者的问题不是不努力，而是不知道每天练什么。下面这条 30 天计划，可以作为入门训练。
+
+| 时间 | 任务 | 产出 |
+| --- | --- | --- |
+| 第 1-3 天 | 学 `top`、`vmstat`、`iostat`、`ss` | 写一页 Linux 指标解释 |
+| 第 4-6 天 | 写一个简单 HTTP API | 记录不同并发下 CPU 和延迟 |
+| 第 7-9 天 | 给 API 加 MySQL 查询 | 比较有索引和无索引 |
+| 第 10-12 天 | 给 API 加 Redis 缓存 | 观察命中率和延迟变化 |
+| 第 13-15 天 | 用 k6 做阶梯压测 | 写第一份压测报告 |
+| 第 16-18 天 | 构造慢 SQL 和大响应 | 观察 P99 如何变差 |
+| 第 19-21 天 | 加入 Kafka 或本地队列 | 观察生产消费速率 |
+| 第 22-24 天 | 模拟下游超时和重试 | 观察重试放大效应 |
+| 第 25-27 天 | 做一次成本估算 | 算单请求和单用户成本 |
+| 第 28-30 天 | 写完整容量评估文档 | 形成闭环报告 |
+
+这 30 天的目标不是掌握所有中间件，而是形成一条完整链路：写服务、压服务、看指标、找瓶颈、做估算、写报告。
+
+## 10. 推荐实验环境
+
+为了降低门槛，可以用 Docker Compose 搭一个最小环境：
+
+> 注意：下面的 Kafka 配置使用 KRaft 模式（不需要 ZooKeeper），这是 Kafka 3.3+ 推荐的部署方式。如果你看到旧教程提到 ZooKeeper，那是 Kafka 的旧架构。
+
+```yaml
+services:
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: demo
+    ports:
+      - "3306:3306"
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  kafka:
+    image: bitnami/kafka:latest
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_CFG_NODE_ID: 1
+      KAFKA_CFG_PROCESS_ROLES: broker,controller
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+```
+
+这个环境不适合生产，但适合学习。学习阶段最重要的是把抽象概念变成可观察现象。你亲眼看到 Redis 大 Key 让延迟抖动，看到 Kafka 消费慢导致 lag 增长，看到没有索引的 SQL 扫描大量行，记忆会比看十篇文章更牢。
+
+## 11. 本章检查清单
 
 | 阶段 | 是否掌握 |
 | --- | --- |

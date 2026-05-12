@@ -52,9 +52,9 @@ import { check, sleep } from 'k6';
 
 export const options = {
   stages: [
-    { duration: '2m', target: 50 },   // 2分钟内爬升到50并发
-    { duration: '5m', target: 200 },   // 5分钟内爬升到200并发
-    { duration: '5m', target: 500 },   // 5分钟内爬升到500并发
+    { duration: '2m', target: 50 },   // 2分钟内爬升到50个虚拟用户（VU）
+    { duration: '5m', target: 200 },   // 5分钟内爬升到200 VU
+    { duration: '5m', target: 500 },   // 5分钟内爬升到500 VU
     { duration: '2m', target: 0 },     // 2分钟内降到0（冷却）
   ],
   thresholds: {
@@ -64,10 +64,13 @@ export const options = {
 };
 
 export default function () {
+  // 随机 ID 确保请求参数有分布，避免缓存命中率过高
   const id = Math.floor(Math.random() * 100000);
   const res = http.get(`https://example.com/api/items/${id}`);
   check(res, { 'status is 200': (r) => r.status === 200 });
-  sleep(1);  // 模拟用户思考时间，每个虚拟用户每秒发1个请求
+  // sleep(1) 表示每个 VU 每秒发约1个请求
+  // 500 VU × 1 req/s = 约 500 RPS
+  sleep(1);
 }
 ```
 
@@ -221,6 +224,8 @@ export default function () {
 
 选择 Qwen、Llama 或其他开源模型，用 vLLM 或 Ollama 做实验。
 
+> 快速开始：如果你只是想体验 AI 推理容量实验，最简单的方式是在 Mac 或 Linux 上安装 Ollama（`curl -fsSL https://ollama.com/install.sh | sh`），然后运行 `ollama run qwen2.5:7b`。不需要 GPU，Apple Silicon Mac 的统一内存就能跑 7B 模型。
+
 观察：
 
 1. tokens/s。
@@ -304,7 +309,86 @@ export default function () {
 
 不要只做实验不写结论。工程团队最宝贵的资产之一，就是这些实验报告。它们会告诉后来的人：系统曾经在哪里出过问题，哪些优化有效，哪些想法只是看起来有效。
 
-## 6. 本章检查清单
+## 6. 一个完整实验报告示例
+
+下面是一份简化的实验报告。初学者可以照着写。
+
+```text
+实验名称：订单列表接口阶梯压测
+
+目标：
+验证订单列表接口在 1000 RPS 内是否满足 P99 < 500ms。
+
+环境：
+应用服务 2 台，每台 4C8G。
+MySQL 8C32G，订单表 500 万行。
+Redis 单节点 4G。
+
+流量模型：
+80% 查询第一页，15% 查询第 2-10 页，5% 深分页。
+用户 ID 按 10 万真实用户分布随机生成。
+
+结果：
+300 RPS：P99 180ms，错误率 0。
+600 RPS：P99 320ms，错误率 0。
+1000 RPS：P99 1.8s，错误率 0.5%。
+
+瓶颈：
+慢查询日志显示深分页 SQL 扫描行数超过 40 万。
+MySQL CPU 85%，应用 CPU 45%。
+
+结论：
+瓶颈在深分页查询，不在应用机器。
+
+方案：
+1. 禁止超过 100 页的深分页。
+2. 改用基于 created_at + id 的游标分页。
+3. 对第一页结果增加短 TTL 缓存。
+4. 重新压测。
+```
+
+这份报告的价值在于，它不是只给一个 QPS 数字，而是把测试目标、环境、流量模型、结果、瓶颈和方案串起来。以后团队讨论时，就不必重新猜一遍。
+
+## 7. 游标分页的代码示例
+
+深分页是容量评估里非常典型的问题。很多初学者写分页会这样写：
+
+```sql
+-- 传统 offset 分页：翻到第 5001 页
+select *
+from orders
+where user_id = ?
+order by created_at desc
+limit 20 offset 100000;
+```
+
+这个 SQL 的问题是，数据库需要先定位到满足条件的前 100020 条记录（排序后），然后丢掉前 100000 条，只返回最后 20 条。页码越大，扫描和丢弃的数据越多，性能越差。这就是为什么"越翻越慢"。
+
+更好的方式是游标分页（也叫 keyset pagination）：
+
+```sql
+-- 游标分页：用上一页最后一条记录的值作为起点
+-- 假设上一页最后一条记录的 created_at='2026-05-01' 且 id=99999
+select *
+from orders
+where user_id = ?
+  and (created_at, id) < ('2026-05-01', 99999)
+order by created_at desc, id desc
+limit 20;
+```
+
+配合索引：
+
+```sql
+create index idx_orders_user_time_id
+on orders(user_id, created_at, id);
+```
+
+这个例子说明，容量优化常常不是“加机器”，而是改变访问模式。访问模式一变，资源消耗模型也会改变。
+
+> 游标分页的限制：它不支持"跳到第 N 页"，只能"下一页/上一页"。对于大多数列表场景（如消息流、订单列表、动态流），这完全够用。如果产品确实需要跳页，可以限制最大页码（如最多 100 页），超过的引导用户使用搜索。
+
+## 8. 本章检查清单
 
 | 实验 | 最低交付物 |
 | --- | --- |

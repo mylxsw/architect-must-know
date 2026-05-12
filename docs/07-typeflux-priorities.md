@@ -1,8 +1,12 @@
-# 第七章 结合 Typeflux，最值得优先学习什么
+# 第七章 以 Typeflux 为案例：实时 AI 产品最该先学什么
 
-如果你现在做的是 Typeflux 这样的产品，涉及语音流式、AI 推理、macOS 客户端和云端 API，那么我认为优先级应该很清楚：AI 推理容量、WebSocket 长连接容量、Redis 和 Kafka、成本优化。
+Typeflux 是作者的一个开源项目。在这本小书里，我不把它当成一个需要读者参与开发的项目，而是把它当成一个教学案例：一个带有 macOS 客户端、语音流式输入、AI 推理和云端 API 的实时 AI 产品。
 
-原因很简单。Typeflux 这类产品不是传统的表单系统，也不是普通 CRUD 后台。它的核心体验来自实时输入、实时识别、实时生成和低延迟反馈。用户感受到的不是“系统有没有返回 200”，而是第一句话多久出来、流式输出是否稳定、弱网下是否能恢复、成本是否能支撑长期使用。
+我认为，用这样的案例训练容量评估很合适。它既不像普通 CRUD 后台那样简单，也不像大型互联网平台那样离初学者太远。它把客户端、网络、长连接、ASR、LLM、Redis、Kafka、数据库和成本放在一条链路上，正好能让读者看到现代应用的真实复杂性。
+
+因此，本章要回答的问题不是给这个开源项目制定私有方案，而是：如果一个初学者想成为架构师，看到 Typeflux 这一类实时 AI 产品，应该优先学习哪些容量评估能力。
+
+原因很简单。实时 AI 产品不是传统的表单系统，也不是普通 CRUD 后台。它的核心体验来自实时输入、实时识别、实时生成和低延迟反馈。用户感受到的不是“系统有没有返回 200”，而是第一句话多久出来、流式输出是否稳定、弱网下是否能恢复、成本是否能支撑长期使用。
 
 ## 1. 第一优先级：AI 推理容量
 
@@ -42,7 +46,9 @@ AI 产品最怕的是技术上能跑，商业上跑不动。
 ```
 
 
-例如：一张 A100 80GB 云租赁每小时成本约 $2-3，如果有效输出 100 万 token/小时，则单 token 成本约 $0.002-0.003/千 token。与 API 调用价格对比，可以判断自建是否划算。
+例如：一张 A100 80GB 云租赁每小时成本约 $2-3（以 2024 年主流云厂商价格为参考，实际价格因厂商和地区而异），如果部署 7B-13B 参数模型并做好 batching 优化，有效输出可达 50-100 万 token/小时，则单 token 成本约 $0.002-0.006/千 token。与 API 调用价格对比，可以判断自建是否划算。
+
+> 注意：这个数字高度依赖模型大小、量化方式和 batch 策略。70B 模型的吞吐会低很多，成本也会高很多。实际决策前必须用自己的模型和流量做基准测试。
 这里“有效”两个字很重要。GPU 利用率低、batch 调度不好、请求排队过长、模型切换频繁，都会让理论成本和真实成本相差很大。
 
 生产实践建议：
@@ -88,7 +94,7 @@ AI 推理容量的底层逻辑，是把用户体验和 GPU 资源连接起来。
 ```text
 单机连接容量 =
   min(
-    文件描述符上限,          // Linux 默认 1024，需要调大到 100000+
+    文件描述符上限,          // Linux 默认 1024，需要调大到 100000+（详见预备章 FD 部分）
     内存上限 ÷ 单连接内存,
     CPU 包处理能力,
     网络带宽 ÷ 单连接带宽,
@@ -123,6 +129,62 @@ AI 推理容量的底层逻辑，是把用户体验和 GPU 资源连接起来。
 5. 发布时直接重启，导致全量用户重连。
 
 长连接容量的关键不是“最多能连多少”，而是“在故障、发布、弱网和流量突增时能不能稳定维持连接”。
+
+### 2.1 长连接服务的最小保护代码
+
+初学者写 WebSocket 服务时，最容易忘记三件事：连接上限、发送队列上限和慢客户端处理。
+
+下面是一个伪代码，表达的是生产思路：
+
+```go
+type Conn struct {
+    id        string
+    userID    string
+    sendQueue chan []byte
+    closed    chan struct{}
+}
+
+const maxQueueSize = 256
+
+func newConn(id, userID string) *Conn {
+    return &Conn{
+        id:        id,
+        userID:    userID,
+        sendQueue: make(chan []byte, maxQueueSize),
+        closed:    make(chan struct{}),
+    }
+}
+
+func (c *Conn) Send(msg []byte) bool {
+    select {
+    case c.sendQueue <- msg:
+        return true
+    default:
+        // 慢客户端不能无限占用内存，队列满了就断开或降级。
+        close(c.closed)
+        return false
+    }
+}
+```
+
+这段代码想说明一个原则：凡是队列，都要有上限。没有上限的队列，本质上是在用内存掩盖容量问题。流量小的时候看不出来，流量一大就会变成 OOM。
+
+### 2.2 发布时为什么要连接排水
+
+普通 HTTP 服务发布时，旧实例停止接收新请求，等正在处理的请求结束即可。WebSocket 不一样，一个连接可能持续几十分钟甚至几小时。如果直接重启实例，所有连接会同时断开，客户端同时重连，形成重连风暴。
+
+更合理的发布流程是：
+
+```text
+实例标记为 draining
+→ 负载均衡不再分配新连接
+→ 旧连接继续服务一段时间
+→ 服务端通知客户端准备重连
+→ 客户端随机延迟重连到新实例
+→ 超时后关闭剩余连接
+```
+
+这类细节看起来不像“架构”，但它决定了系统在生产中是否稳定。
 
 ## 3. 第三优先级：Redis 和 Kafka
 
@@ -178,6 +240,66 @@ Kafka 生产建议：
 
 Redis 和 Kafka 的价值在于解耦和削峰，但如果没有容量评估，它们也会从缓冲区变成事故放大器。
 
+### 3.1 配额系统为什么适合 Redis
+
+实时 AI 产品通常需要配额，例如免费用户每天最多使用 100 次，或每天最多消耗 5 万 token。Redis 适合做这件事，因为它支持原子递增和过期时间。
+
+示例：
+
+```text
+quota:user:{user_id}:2026-05-13
+```
+
+每次请求后执行：
+
+```redis
+INCRBY quota:user:10001:2026-05-13 850
+EXPIRE quota:user:10001:2026-05-13 172800
+```
+
+这里的 850 可以表示本次消耗 token 数。过期时间设置为 2 天，是为了覆盖时区、延迟上报和账单核对。
+
+生产里要注意：
+
+1. `INCRBY` 和 `EXPIRE` 最好用 Lua 脚本保证原子性（否则如果 INCRBY 成功但 EXPIRE 失败，Key 可能永不过期）。
+2. Key 要按用户分散，避免所有请求打到少数 Key。
+3. Redis 不可用时，要有保守策略，例如限制免费用户高成本请求。
+4. 配额数据要异步落库，不能只存在 Redis（Redis 重启后数据可能丢失）。
+
+Lua 脚本示例：
+
+```lua
+-- 原子性地增加配额并设置过期时间
+local current = redis.call('INCRBY', KEYS[1], ARGV[1])
+if current == tonumber(ARGV[1]) then
+    -- 第一次写入时设置过期时间
+    redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+return current
+```
+
+### 3.2 Kafka 事件应该怎么设计
+
+很多团队把整个请求体都塞进 Kafka，这是一个常见坑。消息越大，网络、磁盘、复制和消费成本越高。
+
+更好的事件设计是：
+
+```json
+{
+  "event_id": "evt_123",
+  "user_id": "u_10001",
+  "request_id": "req_abc",
+  "event_type": "llm.completed",
+  "model": "small-model",
+  "input_tokens": 950,
+  "output_tokens": 400,
+  "latency_ms": 3200,
+  "created_at": "2026-05-13T10:00:00Z"
+}
+```
+
+大文本、音频和完整上下文不要直接放消息里，可以放对象存储，消息里只放引用。这样 Kafka 负责事件流，存储系统负责大对象，各自做自己擅长的事。
+
 ## 4. 第四优先级：成本优化
 
 AI 产品最难的不是把功能做出来，而是把单位经济模型做成立。
@@ -229,9 +351,46 @@ AI 产品最难的不是把功能做出来，而是把单位经济模型做成�
 4. 大模型承担了小模型能完成的任务。
 5. 为了降低成本牺牲核心体验，没有区分关键路径和非关键路径。
 
-## 5. Typeflux 的容量评估顺序
+### 4.1 成本账本要怎么落地
 
-如果要从零开始给 Typeflux 做容量评估，我会按下面顺序做。
+如果成本不能归因，就无法优化。一个最小成本账本可以这样设计：
+
+```sql
+create table ai_usage_events (
+  id bigint primary key,
+  user_id bigint not null,
+  request_id varchar(128) not null,
+  feature varchar(64) not null,
+  model varchar(64) not null,
+  input_tokens int not null,
+  output_tokens int not null,
+  audio_seconds int not null default 0,
+  estimated_cost_usd decimal(12, 6) not null,
+  created_at timestamp not null
+);
+```
+
+每天聚合：
+
+```sql
+select
+  feature,
+  model,
+  count(*) as requests,
+  sum(input_tokens) as input_tokens,
+  sum(output_tokens) as output_tokens,
+  sum(estimated_cost_usd) as cost
+from ai_usage_events
+where created_at >= current_date
+group by feature, model
+order by cost desc;
+```
+
+这张表的意义不是做财务系统，而是让工程团队看到：钱花在什么功能、什么模型、什么用户上。没有这个账本，所谓成本优化只能凭感觉。
+
+## 5. 以 Typeflux 为例的容量评估顺序
+
+如果把 Typeflux 当作一个训练案例，从零做容量评估，可以按下面顺序展开。
 
 第一，画出核心链路：
 
@@ -289,4 +448,4 @@ macOS 客户端
 | Kafka 积压多久能恢复 |  |
 | 过载时是否有模型降级和排队策略 |  |
 
-Typeflux 这类产品的核心挑战，不是单个技术点难，而是它把客户端、网络、实时系统、AI 推理和商业成本放在了一条链路里。容量评估的价值，就是把这条链路看清楚。
+Typeflux 作为案例的价值，不在于它本身有多特殊，而在于它把客户端、网络、实时系统、AI 推理和商业成本放在了一条链路里。容量评估的价值，就是把这条链路看清楚。读者以后遇到语音助手、会议转写、实时客服、AI 输入法或多模态助手，都可以沿用这套分析方法。

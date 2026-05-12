@@ -78,7 +78,11 @@ QPS 只是系统容量的入口指标，就像体温只是健康指标之一。�
          ≈ 16667
 ```
 
-注意：这里假设高峰期内流量均匀分布。实际中流量会有波动，通常还需要乘以一个峰值放大系数（比如 2-3 倍）来应对突发。
+注意：这里假设高峰期内流量均匀分布。实际中流量会有波动，通常还需要乘以一个峰值放大系数（比如 2-3 倍）来应对突发。加上放大系数后：
+
+```text
+实际规划 QPS = 16667 × 2 ≈ 33334
+```
 
 这个数字当然粗糙，但它已经比“100 万用户就要按 100 万并发设计”可靠得多。更重要的是，它告诉你可以从哪里修正模型：高峰活跃比例是不是 20%，每分钟请求数是不是 5，是否存在突发活动，是否有爬虫和异常流量。
 
@@ -105,6 +109,8 @@ QPS 只是系统容量的入口指标，就像体温只是健康指标之一。�
 失稳区：错误率上升，队列积压，重试风暴（85%-95%）
 崩溃区：服务不可用，依赖被拖垮（> 95%）
 ```
+
+> 初学者提示：这个曲线不是精确的物理定律，不同系统的拐点位置不同。有些系统在 60% 利用率就开始抖动（比如有锁竞争的数据库），有些系统到 85% 还很稳定（比如纯计算无状态服务）。关键是通过压测找到你自己系统的拐点。
 
 一个好的容量评估，就是要在拐点区之前给出预警，而不是等系统进入崩溃区。通常建议资源利用率长期不超过 70%，为突发流量留出余量。
 
@@ -134,7 +140,120 @@ QPS 只是系统容量的入口指标，就像体温只是健康指标之一。�
 
 第五个坑，是不把成本纳入容量评估。特别是 AI 产品，每一次调用都可能产生真实的 token 或 GPU 成本。没有成本模型的增长，可能越增长越亏。
 
-## 7. 本章检查清单
+## 7. 从日志里做第一版容量评估
+
+初学者最容易卡住的地方，是不知道容量评估的数据从哪里来。其实第一版不需要复杂平台，只要有访问日志、数据库慢日志、Redis 指标和云账单，就能做出一个粗糙但有价值的模型。
+
+假设网关日志里有这些字段：
+
+```text
+timestamp, user_id, path, status, duration_ms, request_bytes, response_bytes
+```
+
+可以先统计三个问题：
+
+1. 每分钟请求量是多少。
+2. 每个接口的 P95、P99 延迟是多少。
+3. 响应体和请求体平均多大。
+
+如果日志已经进入 ClickHouse，可以用类似下面的 SQL：
+
+```sql
+select
+  toStartOfMinute(timestamp) as minute,
+  path,
+  count() as requests,
+  quantile(0.95)(duration_ms) as p95,
+  quantile(0.99)(duration_ms) as p99,
+  avg(request_bytes) as avg_req_bytes,
+  avg(response_bytes) as avg_resp_bytes
+from access_logs
+where timestamp >= now() - interval 1 day
+group by minute, path
+order by minute, requests desc;
+```
+
+这个查询不是为了做漂亮报表，而是为了得到容量评估的入口：哪个接口流量最大，哪个接口尾延迟最差，哪个接口带宽消耗最大。
+
+如果没有 ClickHouse，用最朴素的脚本也可以先做抽样统计：
+
+```python
+# 假设 access.log 每行是一个 JSON 对象，包含 path 和 duration_ms 字段
+# 例如：{"path": "/api/orders", "duration_ms": 45, "status": 200}
+from collections import defaultdict
+import json
+
+stats = defaultdict(list)
+
+with open("access.log") as f:
+    for line in f:
+        row = json.loads(line)
+        stats[row["path"]].append(row["duration_ms"])
+
+for path, values in stats.items():
+    values.sort()
+    p95 = values[int(len(values) * 0.95)]
+    p99 = values[int(len(values) * 0.99)]
+    print(f"{path}: 请求数={len(values)}, P95={p95}ms, P99={p99}ms")
+```
+
+这段代码很简单，但它能训练一个重要习惯：不要凭感觉说系统慢，要用数据定位慢在哪里。
+
+## 8. 一个新功能上线前怎么做容量评估
+
+很多容量问题不是突然出现的，而是在需求评审时就已经埋下了。
+
+假设产品要增加“批量导出最近一年订单”的功能。普通功能评审可能只问：页面怎么做，权限怎么做，文件格式是什么。容量评估要多问几层：
+
+1. 最多导出多少行。
+2. 查询是否会扫主库大表。
+3. 是否会占用大量内存生成 Excel。
+4. 文件生成是同步还是异步。
+5. 同时有多少用户可能导出。
+6. 文件存储多久。
+7. 失败后是否重试。
+8. 是否需要限流。
+
+一个更合理的实现通常是：
+
+```text
+用户提交导出任务
+→ 写入 export_jobs 表
+→ 后台 worker 分页查询
+→ 分批写入临时文件
+→ 上传对象存储
+→ 返回下载链接
+→ 文件 7 天后自动删除
+```
+
+这里有几个容量设计点。
+
+第一，不能在 HTTP 请求里同步导出大文件，否则请求超时、内存膨胀、用户刷新后重复提交。
+
+第二，不能一次性把所有数据读进内存，而要分页或游标读取。
+
+第三，导出 worker 要有并发上限，避免把数据库打满。
+
+第四，导出文件要有生命周期，不能永久堆在对象存储。
+
+可以写一个最小任务表：
+
+```sql
+create table export_jobs (
+  id bigint primary key,
+  user_id bigint not null,
+  status varchar(32) not null,
+  query_params json not null,
+  file_url varchar(1024),
+  error_message text,
+  created_at timestamp not null,
+  updated_at timestamp not null
+);
+```
+
+这不是为了教数据库建模，而是说明容量意识如何改变实现方式。同样一个功能，有容量意识的做法会自然走向异步、分页、限流和生命周期管理。
+
+## 9. 本章检查清单
 
 你可以用下面这份清单检查一个系统是否具备基本容量意识。
 

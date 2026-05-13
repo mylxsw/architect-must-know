@@ -153,7 +153,7 @@ export default function () {
 1. 只看 Value 大小，不看 Redis 对象开销。
 2. 用 `keys *` 在线上扫描全量 Key。
 3. 大 Key 删除时阻塞主线程。
-4. 缓存没有 TTL，最终变成数据库。
+4. 缓存没有 TTL（Time To Live），最终变成数据库。
 5. 以为 Redis Cluster 可以自动解决热 Key。
 
 这个实验做完，你对 Redis 的理解会比只看文档深很多。

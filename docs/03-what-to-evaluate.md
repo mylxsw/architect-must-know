@@ -55,7 +55,7 @@
 | 热数据 | 最近 7 天、30 天高频访问数据 |
 | 冷数据 | 历史归档数据 |
 | 索引大小 | MySQL 二级索引、全文索引 |
-| 日志容量 | ELK、ClickHouse、对象存储日志 |
+| 日志容量 | ELK（Elasticsearch, Logstash, Kibana）、ClickHouse、对象存储日志 |
 | 对象存储 | 图片、音频、视频、附件 |
 | 备份容量 | 全量备份、增量备份 |
 | 副本数量 | 主从、三副本、跨机房复制 |
@@ -177,13 +177,13 @@
 | 内容 | 含义 |
 | --- | --- |
 | 带宽 | Mbps、Gbps |
-| RTT | 网络往返延迟 |
+| RTT（Round-Trip Time） | 网络往返延迟 |
 | TCP 连接数 | 长连接和短连接压力 |
 | WebSocket | 长连接容量 |
 | Connection Pool | 连接池大小 |
-| SYN Flood | 半连接攻击或异常流量 |
-| NIC 吞吐 | 网卡能力 |
-| CDN 回源 | 源站压力 |
+| SYN（Synchronize） Flood | 半连接攻击或异常流量 |
+| NIC（Network Interface Card） 吞吐 | 网卡能力 |
+| CDN（Content Delivery Network） 回源 | 源站压力 |
 | Egress Cost | 云厂商出网费用 |
 
 特别是 AI 系统和实时语音系统，网络容量往往比传统 Web 更重要。
@@ -202,7 +202,7 @@
 50000 × 32kbps = 1.6Gbps
 ```
 
-这还没有算协议开销、下行数据、TLS、重传和峰值波动。
+这还没有算协议开销、下行数据、TLS（Transport Layer Security）、重传和峰值波动。
 
 生产建议：
 
@@ -216,7 +216,7 @@
 
 ## 6. 数据库、缓存和队列：状态系统的容量
 
-数据库容量是架构师绕不开的能力。需要评估单表容量、索引容量、Buffer Pool、连接数、慢查询、主从延迟、WAL/Redo Log、Binlog、热点数据和分库分表。
+数据库容量是架构师绕不开的能力。需要评估单表容量、索引容量、Buffer Pool、连接数、慢查询、主从延迟、WAL（Write-Ahead Log）/Redo Log、Binlog、热点数据和分库分表。
 
 一个常见错误是只看表里的数据大小，不看索引大小。很多 MySQL 表，索引占用空间比数据本身还大。查询性能也不是由“表有多大”单独决定，而是由查询模式、索引设计、Buffer Pool 命中率、磁盘 IO 和锁冲突共同决定。
 
@@ -314,7 +314,7 @@ Redis 的容量风险主要来自四件事。
 
 第三，热 Key 会让集群失衡。Redis Cluster 有很多节点，但一个 Key 只落在一个节点上。某个 Key 每秒被访问几十万次，这个节点会很忙，其他节点帮不上忙。
 
-第四，持久化有成本。RDB 快照、AOF rewrite 都可能带来 CPU、内存和磁盘压力。
+第四，持久化有成本。RDB（Redis Database Backup）快照、AOF（Append Only File） rewrite 都可能带来 CPU、内存和磁盘压力。
 
 可以用一个例子理解 Redis 内存估算。假设系统有 500 万个用户配额 Key，每个 Key 平均：
 
@@ -340,7 +340,7 @@ Redis 对象元数据（dictEntry + redisObject + SDS 头等）：约 80-100 字
 
 生产中要建立几个习惯：
 
-1. 所有临时 Key 必须有 TTL。
+1. 所有临时 Key 必须有 TTL（Time To Live）。
 2. 定期扫描 big key 和 hot key。
 3. Value 大小要有上限。
 4. 不在线上使用 `keys *`。
@@ -413,7 +413,7 @@ Kafka 不是免费的缓冲垫。它帮你争取时间，但你最终还是要�
 
 如果说传统 Web 系统的核心指标是 QPS，那么 AI 推理系统的核心指标就变成了 Token。
 
-AI 系统和传统系统最大的不同是：请求之间差异巨大。一个普通 HTTP 请求可能几十毫秒结束，而一个 LLM 请求可能持续几十秒；一个用户输入 200 个 token，另一个用户可能输入 10 万 token；有的请求只生成一句话，有的请求要生成几千字。
+AI 系统和传统系统最大的不同是：请求之间差异巨大。一个普通 HTTP 请求可能几十毫秒结束，而一个 LLM（Large Language Model）请求可能持续几十秒；一个用户输入 200 个 token，另一个用户可能输入 10 万 token；有的请求只生成一句话，有的请求要生成几千字。
 
 AI 系统容量要评估：
 
@@ -503,7 +503,7 @@ AI 体验可以拆成两个阶段。
 2. 输入上下文太长。
 3. 模型冷启动。
 4. batch 调度等待。
-5. 上游 ASR 或检索耗时。
+5. 上游 ASR（Automatic Speech Recognition） 或检索耗时。
 
 第二阶段是持续生成过程，这主要看 TPOT。TPOT 高，常见原因包括：
 

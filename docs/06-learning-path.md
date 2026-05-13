@@ -64,7 +64,7 @@
 5. QUIC。
 6. CDN。
 7. DNS。
-8. TLS。
+8. TLS（Transport Layer Security）。
 9. 连接池。
 10. 超时、重试、限流。
 
@@ -99,7 +99,7 @@ MySQL 要理解：
 1. B+ 树索引。
 2. Buffer Pool。
 3. 事务隔离级别。
-4. MVCC。
+4. MVCC（Multi-Version Concurrency Control）。
 5. Redo Log。
 6. Binlog。
 7. 慢查询。
@@ -114,7 +114,7 @@ Redis 要理解：
 2. 数据结构。
 3. 内存开销。
 4. 淘汰策略。
-5. RDB/AOF。
+5. RDB（Redis Database Backup）/AOF（Append Only File）。
 6. Cluster。
 7. 热 Key 和大 Key。
 
@@ -276,7 +276,7 @@ Kafka 要理解：
 4. KV Cache。
 5. Continuous Batching。
 6. Batch Scheduling。
-7. CUDA 基础。
+7. CUDA（Compute Unified Device Architecture） 基础。
 8. GPU 显存计算。
 9. Tensor Parallel（模型太大单卡放不下时，跨卡切分）。
 10. Pipeline Parallel（按层切分模型到不同 GPU）。

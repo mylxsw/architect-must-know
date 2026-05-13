@@ -8,7 +8,7 @@
 
 ## 1. 初级工程师：先建立资源意识
 
-初级工程师主要关注功能是否能跑通。这个阶段最重要的是写出正确代码，理解基本的 HTTP、数据库、缓存和日志。至于系统什么时候会崩，通常还没有直觉。
+初级工程师主要关注功能是否能跑通。这个阶段最重要的是写出正确代码，理解基本的 HTTP（Hypertext Transfer Protocol）、数据库、缓存和日志。至于系统什么时候会崩，通常还没有直觉。
 
 这并不丢人。每个人都要从这里开始。
 
@@ -32,7 +32,7 @@
 
 1. 会看接口 QPS、响应时间和错误率。
 2. 会看服务 CPU、内存、磁盘和网络。
-3. 知道慢 SQL 会拖慢系统。
+3. 知道慢 SQL（Structured Query Language） 会拖慢系统。
 4. 知道 Redis 不是无限内存。
 5. 知道日志太多会产生成本和 IO 压力。
 6. 知道重试可能放大故障。
@@ -100,7 +100,7 @@ orders = db.query("SELECT * FROM orders WHERE user_id IN (?)", user_ids)
 | 慢查询日志 | 找数据库瓶颈 |
 | explain | 理解 SQL 执行计划 |
 | Redis memory | 看 Key 和内存占用 |
-| APM | 看接口耗时分布（如 SkyWalking、Datadog、New Relic） |
+| APM（Application Performance Monitoring） | 看接口耗时分布（如 SkyWalking、Datadog、New Relic） |
 | Grafana | 看资源趋势（通常配合 Prometheus 使用） |
 | k6/wrk | 做基本压测 |
 | pprof/flame graph | 找 CPU 和内存热点（pprof 是 Go 的性能分析工具，flame graph 是一种可视化方式，能直观看到哪些函数消耗最多 CPU） |
@@ -203,7 +203,7 @@ orders = db.query("SELECT * FROM orders WHERE user_id IN (?)", user_ids)
 
 好的架构师不会追求一次性设计一个完美系统。他会设计一个可演进的系统，让每个阶段都有足够能力，又不提前背上过重复杂度。
 
-## 5. SRE 和运维负责人：让系统长期可靠地活着
+## 5. SRE（Site Reliability Engineering） 和运维负责人：让系统长期可靠地活着
 
 SRE 更关注系统运行状态和自动化能力。
 
